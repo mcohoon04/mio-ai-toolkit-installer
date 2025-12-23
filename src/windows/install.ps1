@@ -29,6 +29,55 @@ Write-Host ""
 # STEP 1: Install Dependencies
 ##############################################################
 
+# Helper function to refresh PATH
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
+
+# Helper function to fix winget source issues
+function Repair-WingetSource {
+    Log-Info "Repairing winget sources..."
+    try {
+        winget source reset --force 2>$null
+        Start-Sleep -Seconds 2
+    } catch {
+        # Ignore errors
+    }
+}
+
+# Helper function to install via winget with retry
+function Install-ViaWinget {
+    param($PackageId, $DisplayName, $ManualUrl)
+
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Log-Error "Winget not available. Please install $DisplayName manually from $ManualUrl"
+        throw "$DisplayName installation failed - winget not available"
+    }
+
+    # First attempt
+    $output = winget install $PackageId --accept-package-agreements --accept-source-agreements 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        return $true
+    }
+
+    # Check for source errors and retry after repair
+    if ($output -match "source|0x8a15000f") {
+        Log-Warning "Winget source issue detected, attempting repair..."
+        Repair-WingetSource
+
+        # Second attempt after repair
+        winget install $PackageId --accept-package-agreements --accept-source-agreements 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+    }
+
+    # Failed
+    Log-Error "Winget failed to install $DisplayName"
+    Log-Info "Please install manually from: $ManualUrl"
+    throw "$DisplayName installation failed"
+}
+
 function Install-NodeJS {
     if (Get-Command node -ErrorAction SilentlyContinue) {
         $version = node --version
@@ -37,18 +86,16 @@ function Install-NodeJS {
     }
 
     Log-Info "Installing Node.js..."
+    Install-ViaWinget "OpenJS.NodeJS.LTS" "Node.js" "https://nodejs.org"
 
-    # Try winget first
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
-        Log-Success "Node.js installed via winget"
+    Refresh-Path
+
+    # Verify installation
+    if (Get-Command node -ErrorAction SilentlyContinue) {
+        Log-Success "Node.js installed ($(node --version))"
     } else {
-        Log-Warning "Winget not available. Please install Node.js manually from https://nodejs.org"
-        throw "Node.js installation failed"
+        Log-Warning "Node.js installed but may require terminal restart"
     }
-
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
 function Install-Git {
@@ -59,17 +106,16 @@ function Install-Git {
     }
 
     Log-Info "Installing Git..."
+    Install-ViaWinget "Git.Git" "Git" "https://git-scm.com"
 
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        winget install Git.Git --accept-package-agreements --accept-source-agreements
-        Log-Success "Git installed via winget"
+    Refresh-Path
+
+    # Verify installation
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        Log-Success "Git installed"
     } else {
-        Log-Warning "Winget not available. Please install Git manually from https://git-scm.com"
-        throw "Git installation failed"
+        Log-Warning "Git installed but may require terminal restart"
     }
-
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
 function Install-GitHubCLI {
@@ -80,17 +126,16 @@ function Install-GitHubCLI {
     }
 
     Log-Info "Installing GitHub CLI..."
+    Install-ViaWinget "GitHub.cli" "GitHub CLI" "https://cli.github.com"
 
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        winget install GitHub.cli --accept-package-agreements --accept-source-agreements
-        Log-Success "GitHub CLI installed via winget"
+    Refresh-Path
+
+    # Verify installation
+    if (Get-Command gh -ErrorAction SilentlyContinue) {
+        Log-Success "GitHub CLI installed"
     } else {
-        Log-Warning "Winget not available. Please install GitHub CLI manually from https://cli.github.com"
-        throw "GitHub CLI installation failed"
+        Log-Warning "GitHub CLI installed but may require terminal restart"
     }
-
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
 function Install-ClaudeCode {
@@ -102,10 +147,16 @@ function Install-ClaudeCode {
     Log-Info "Installing Claude Code..."
 
     # Use the official Windows installer
-    Invoke-Expression "& { $(Invoke-RestMethod https://claude.ai/install.ps1) }"
+    try {
+        Invoke-Expression "& { $(Invoke-RestMethod https://claude.ai/install.ps1) }"
+    } catch {
+        Log-Error "Failed to download Claude Code installer"
+        Log-Info "Please install manually from: https://claude.ai/download"
+        throw "Claude Code installation failed"
+    }
 
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+    # Refresh PATH and add Claude bin directory
+    Refresh-Path
     $env:Path = "$env:USERPROFILE\.claude\bin;$env:Path"
 
     if (Get-Command claude -ErrorAction SilentlyContinue) {
