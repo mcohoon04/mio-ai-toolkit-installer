@@ -305,7 +305,19 @@ function Install-ClaudeCode {
     }
 
     # Wait for file system to sync (Claude installer may be async)
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 3
+
+    # Add known Claude paths to current session PATH
+    $pathsToAdd = @(
+        "$env:USERPROFILE\.local\bin",
+        "$env:USERPROFILE\.claude\bin",
+        "$env:LOCALAPPDATA\Microsoft\WindowsApps"
+    )
+    foreach ($p in $pathsToAdd) {
+        if ((Test-Path $p) -and ($env:Path -notlike "*$p*")) {
+            $env:Path = "$p;$env:Path"
+        }
+    }
 
     # Verify installation using full path
     $installedClaude = Get-ClaudeBin
