@@ -12,6 +12,8 @@ $PLUGIN_REPO = "mcohoon04/mio-ai-toolkit"
 $MARKETPLACE_NAME = "mio-ai-marketplace"
 $PLUGIN_NAME = "mio-ai-toolkit"
 $WORKSPACE_DIR = "$env:USERPROFILE\claude_workspace"
+$CLAUDE_BIN = "$env:USERPROFILE\.claude\bin\claude.exe"
+$CLAUDE_BIN_ALT = "$env:USERPROFILE\.local\bin\claude.exe"
 
 # Logging functions
 function Log-Info { param($msg) Write-Host "[INFO] $msg" -ForegroundColor Cyan }
@@ -259,8 +261,17 @@ function Install-GitHubCLI {
     throw "GitHub CLI installation failed"
 }
 
+# Helper function to find Claude binary
+function Get-ClaudeBin {
+    if (Test-Path $CLAUDE_BIN) { return $CLAUDE_BIN }
+    if (Test-Path $CLAUDE_BIN_ALT) { return $CLAUDE_BIN_ALT }
+    return $null
+}
+
 function Install-ClaudeCode {
-    if (Get-Command claude -ErrorAction SilentlyContinue) {
+    # Check if already installed using full path
+    $existingClaude = Get-ClaudeBin
+    if ($existingClaude) {
         Log-Success "Claude Code already installed"
         return
     }
@@ -276,23 +287,14 @@ function Install-ClaudeCode {
         throw "Claude Code installation failed"
     }
 
-    # Refresh PATH and add Claude bin directories (installer uses .local\bin)
-    Refresh-Path
-    $claudePaths = @(
-        "$env:USERPROFILE\.local\bin",
-        "$env:USERPROFILE\.claude\bin"
-    )
-    foreach ($cp in $claudePaths) {
-        if (Test-Path $cp) {
-            $env:Path = "$cp;$env:Path"
-        }
-    }
-
-    if (Get-Command claude -ErrorAction SilentlyContinue) {
+    # Verify installation using full path
+    $installedClaude = Get-ClaudeBin
+    if ($installedClaude) {
         Log-Success "Claude Code installed"
     } else {
-        Log-Warning "Claude Code installed but may require terminal restart"
-        Log-Info "Add this to your PATH: $env:USERPROFILE\.local\bin"
+        Log-Error "Claude Code installation failed"
+        Log-Info "Please install manually from: https://claude.ai/download"
+        throw "Claude Code installation failed"
     }
 }
 
@@ -332,10 +334,17 @@ function Authenticate-GitHub {
 ##############################################################
 
 function Install-Plugin {
+    # Get Claude binary path
+    $claudeBin = Get-ClaudeBin
+    if (-not $claudeBin) {
+        Log-Error "Claude Code not found"
+        throw "Claude Code must be installed first"
+    }
+
     Log-Info "Adding private marketplace..."
 
     try {
-        claude plugin marketplace add $PLUGIN_REPO 2>$null
+        & $claudeBin plugin marketplace add $PLUGIN_REPO 2>$null
         Log-Success "Marketplace added: $PLUGIN_REPO"
     } catch {
         Log-Warning "Marketplace may already exist, continuing..."
@@ -343,7 +352,7 @@ function Install-Plugin {
 
     Log-Info "Installing Mio AI Toolkit plugin..."
 
-    claude plugin install "${PLUGIN_NAME}@${MARKETPLACE_NAME}"
+    & $claudeBin plugin install "${PLUGIN_NAME}@${MARKETPLACE_NAME}"
 
     if ($LASTEXITCODE -eq 0) {
         Log-Success "Plugin installed: $PLUGIN_NAME"
