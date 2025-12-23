@@ -18,7 +18,17 @@ PLUGIN_REPO="mcohoon04/mio-ai-toolkit"
 MARKETPLACE_NAME="mio-ai-marketplace"
 PLUGIN_NAME="mio-ai-toolkit"
 WORKSPACE_DIR="$HOME/claude_workspace"
-CLAUDE_BIN="$HOME/.claude/bin/claude"
+
+# Helper function to find Claude binary (checks both possible locations)
+get_claude_bin() {
+    if [[ -x "$HOME/.local/bin/claude" ]]; then
+        echo "$HOME/.local/bin/claude"
+    elif [[ -x "$HOME/.claude/bin/claude" ]]; then
+        echo "$HOME/.claude/bin/claude"
+    else
+        echo ""
+    fi
+}
 
 # Logging functions
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
@@ -102,8 +112,10 @@ install_github_cli() {
 }
 
 install_claude_code() {
-    # Check if already installed using full path
-    if [[ -x "$CLAUDE_BIN" ]]; then
+    # Check if already installed using helper function
+    local claude_path
+    claude_path=$(get_claude_bin)
+    if [[ -n "$claude_path" ]]; then
         log_success "Claude Code already installed"
         return 0
     fi
@@ -111,9 +123,10 @@ install_claude_code() {
     log_info "Installing Claude Code..."
     curl -fsSL https://claude.ai/install.sh | bash
 
-    # Verify installation using full path
-    if [[ -x "$CLAUDE_BIN" ]]; then
-        log_success "Claude Code installed"
+    # Verify installation
+    claude_path=$(get_claude_bin)
+    if [[ -n "$claude_path" ]]; then
+        log_success "Claude Code installed at $claude_path"
     else
         log_error "Claude Code installation failed"
         log_info "Please install manually from: https://claude.ai/download"
@@ -152,10 +165,19 @@ authenticate_github() {
 ##############################################################
 
 install_plugin() {
+    # Get Claude binary path
+    local claude_bin
+    claude_bin=$(get_claude_bin)
+    if [[ -z "$claude_bin" ]]; then
+        log_error "Claude Code not found"
+        log_info "Please install Claude Code first"
+        return 1
+    fi
+
     log_info "Adding private marketplace..."
 
     # Add marketplace (may already exist) - use full path
-    if "$CLAUDE_BIN" plugin marketplace add "$PLUGIN_REPO" 2>/dev/null; then
+    if "$claude_bin" plugin marketplace add "$PLUGIN_REPO" 2>/dev/null; then
         log_success "Marketplace added: $PLUGIN_REPO"
     else
         log_warning "Marketplace may already exist, continuing..."
@@ -164,7 +186,7 @@ install_plugin() {
     log_info "Installing Mio AI Toolkit plugin..."
 
     # Install plugin - use full path
-    if "$CLAUDE_BIN" plugin install "${PLUGIN_NAME}@${MARKETPLACE_NAME}"; then
+    if "$claude_bin" plugin install "${PLUGIN_NAME}@${MARKETPLACE_NAME}"; then
         log_success "Plugin installed: $PLUGIN_NAME"
     else
         log_error "Plugin installation failed"
