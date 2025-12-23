@@ -193,10 +193,13 @@ setup_gmail_mcp() {
     # Create directory
     mkdir -p "$gmail_dir"
 
+    # Embedded OAuth credentials
+    local OAUTH_JSON='{"installed":{"client_id":"604655086804-u03uf4fegj12e0dql8bklb0fb9nhicps.apps.googleusercontent.com","project_id":"gmail-mcp-481715","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"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","redirect_uris":["http://localhost"]}}'
+
     # Get the directory where this script is located
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    # Copy OAuth credentials (bundled with installer)
+    # Try to copy from bundled file first, otherwise use embedded
     if [[ -f "$SCRIPT_DIR/gcp-oauth.keys.json" ]]; then
         cp "$SCRIPT_DIR/gcp-oauth.keys.json" "$oauth_file"
         log_success "OAuth credentials copied"
@@ -204,9 +207,9 @@ setup_gmail_mcp() {
         cp "./gcp-oauth.keys.json" "$oauth_file"
         log_success "OAuth credentials copied"
     else
-        log_error "gcp-oauth.keys.json not found"
-        log_info "Please obtain this file and place it in ~/.gmail-mcp/"
-        return 1
+        # Use embedded credentials
+        echo "$OAUTH_JSON" > "$oauth_file"
+        log_success "OAuth credentials created"
     fi
 
     # Run Gmail authentication
@@ -407,8 +410,15 @@ main() {
     echo "Your workspace is at: $WORKSPACE_DIR"
     echo ""
 
+    # Get current terminal window ID before launching app
+    INSTALLER_WINDOW=$(osascript -e 'tell application "Terminal" to get id of front window')
+
     # Launch the app
     launch_app
+
+    # Auto-close the installer terminal window (not the Claude Workspace one)
+    sleep 3
+    osascript -e "tell application \"Terminal\" to close (every window whose id is $INSTALLER_WINDOW)" &
 }
 
 # Run main function

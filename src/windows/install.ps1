@@ -15,9 +15,9 @@ $WORKSPACE_DIR = "$env:USERPROFILE\claude_workspace"
 
 # Logging functions
 function Log-Info { param($msg) Write-Host "[INFO] $msg" -ForegroundColor Cyan }
-function Log-Success { param($msg) Write-Host "[✓] $msg" -ForegroundColor Green }
-function Log-Warning { param($msg) Write-Host "[!] $msg" -ForegroundColor Yellow }
-function Log-Error { param($msg) Write-Host "[✗] $msg" -ForegroundColor Red }
+function Log-Success { param($msg) Write-Host "[OK] $msg" -ForegroundColor Green }
+function Log-Warning { param($msg) Write-Host "[WARN] $msg" -ForegroundColor Yellow }
+function Log-Error { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
 
 Write-Host ""
 Write-Host "===========================================" -ForegroundColor White
@@ -187,6 +187,9 @@ function Setup-GmailMCP {
         New-Item -ItemType Directory -Path $gmailDir -Force | Out-Null
     }
 
+    # Embedded OAuth credentials
+    $OAUTH_JSON = '{"installed":{"client_id":"604655086804-u03uf4fegj12e0dql8bklb0fb9nhicps.apps.googleusercontent.com","project_id":"gmail-mcp-481715","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"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","redirect_uris":["http://localhost"]}}'
+
     # Find and copy OAuth credentials
     $scriptDir = Split-Path -Parent $MyInvocation.ScriptName
     $possiblePaths = @(
@@ -206,9 +209,9 @@ function Setup-GmailMCP {
     }
 
     if (-not $found) {
-        Log-Error "gcp-oauth.keys.json not found"
-        Log-Info "Please obtain this file and place it in $gmailDir"
-        throw "Gmail OAuth credentials not found"
+        # Use embedded credentials
+        $OAUTH_JSON | Out-File -FilePath $oauthFile -Encoding UTF8
+        Log-Success "OAuth credentials created"
     }
 
     # Run Gmail authentication
