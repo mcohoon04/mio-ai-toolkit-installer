@@ -123,11 +123,16 @@ install_claude_code() {
     claude_path=$(get_claude_bin)
     if [[ -n "$claude_path" ]]; then
         log_success "Claude Code already installed"
+        # Still ensure PATH is set up
+        ensure_claude_in_path
         return 0
     fi
 
     log_info "Installing Claude Code..."
     curl -fsSL https://claude.ai/install.sh | bash
+
+    # Ensure ~/.local/bin is in PATH
+    ensure_claude_in_path
 
     # Verify installation
     claude_path=$(get_claude_bin)
@@ -137,6 +142,35 @@ install_claude_code() {
         log_error "Claude Code installation failed"
         log_info "Please install manually from: https://claude.ai/download"
         return 1
+    fi
+}
+
+# Ensure ~/.local/bin is in PATH (current session and permanently)
+ensure_claude_in_path() {
+    local local_bin="$HOME/.local/bin"
+
+    # Add to current session if not already there
+    if [[ ":$PATH:" != *":$local_bin:"* ]]; then
+        export PATH="$local_bin:$PATH"
+        log_info "Added $local_bin to PATH for current session"
+    fi
+
+    # Add to shell rc file for future sessions
+    local shell_rc=""
+    if [[ -n "$ZSH_VERSION" ]] || [[ "$SHELL" == */zsh ]]; then
+        shell_rc="$HOME/.zshrc"
+    elif [[ -n "$BASH_VERSION" ]] || [[ "$SHELL" == */bash ]]; then
+        shell_rc="$HOME/.bashrc"
+    fi
+
+    if [[ -n "$shell_rc" ]] && [[ -f "$shell_rc" ]]; then
+        # Check if already added
+        if ! grep -q 'export PATH="\$HOME/.local/bin:\$PATH"' "$shell_rc" 2>/dev/null; then
+            echo '' >> "$shell_rc"
+            echo '# Added by Mio AI Toolkit installer' >> "$shell_rc"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
+            log_success "Added ~/.local/bin to $shell_rc"
+        fi
     fi
 }
 
