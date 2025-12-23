@@ -31,17 +31,31 @@ echo "   Mio AI Toolkit Installer for macOS"
 echo "==========================================="
 echo ""
 
+
 ##############################################################
 # STEP 1: Install Dependencies
 ##############################################################
 
 install_homebrew() {
+    # Check if brew is in PATH
     if command -v brew &> /dev/null; then
         log_success "Homebrew already installed"
         return 0
     fi
 
-    log_info "Installing Homebrew..."
+    # Try to find brew in common locations and add to PATH
+    if [[ -f /opt/homebrew/bin/brew ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+        log_success "Homebrew found (Apple Silicon)"
+        return 0
+    elif [[ -f /usr/local/bin/brew ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+        log_success "Homebrew found (Intel)"
+        return 0
+    fi
+
+    # Need to install Homebrew
+    log_info "Installing Homebrew (you may be prompted for your password)..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
     # Add to PATH for Apple Silicon Macs
@@ -298,6 +312,53 @@ PLIST_EOF
     log_success "Desktop shortcut created: $app_name"
 }
 
+add_to_dock() {
+    local app_path="$HOME/Desktop/Claude Workspace.app"
+
+    if [[ ! -d "$app_path" ]]; then
+        log_warning "App not found, skipping Dock"
+        return 0
+    fi
+
+    log_info "Adding to Dock..."
+
+    # Check if already in Dock (avoid duplicates)
+    if defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q "Claude Workspace"; then
+        log_success "Already in Dock"
+        return 0
+    fi
+
+    # Add to Dock using defaults
+    defaults write com.apple.dock persistent-apps -array-add "<dict>
+        <key>tile-data</key>
+        <dict>
+            <key>file-data</key>
+            <dict>
+                <key>_CFURLString</key>
+                <string>$app_path</string>
+                <key>_CFURLStringType</key>
+                <integer>0</integer>
+            </dict>
+        </dict>
+    </dict>"
+
+    # Restart Dock to apply changes
+    killall Dock
+
+    log_success "Added to Dock"
+}
+
+launch_app() {
+    local app_path="$HOME/Desktop/Claude Workspace.app"
+
+    if [[ -d "$app_path" ]]; then
+        log_info "Launching Claude Workspace..."
+        sleep 2  # Give Dock time to restart
+        open "$app_path"
+        log_success "Claude Workspace launched!"
+    fi
+}
+
 ##############################################################
 # MAIN EXECUTION
 ##############################################################
@@ -334,6 +395,7 @@ main() {
     log_info "Step 5/5: Creating workspace..."
     create_workspace
     create_desktop_shortcut
+    add_to_dock
     echo ""
 
     # Success message
@@ -341,12 +403,12 @@ main() {
     echo -e "${GREEN}   Installation Complete!${NC}"
     echo "==========================================="
     echo ""
-    echo "Next steps:"
-    echo "  1. Double-click 'Claude Workspace' on your Desktop"
-    echo "  2. Or open Terminal and run: cd ~/claude_workspace && claude"
-    echo ""
+    echo "Claude Workspace has been added to your Dock and Desktop."
     echo "Your workspace is at: $WORKSPACE_DIR"
     echo ""
+
+    # Launch the app
+    launch_app
 }
 
 # Run main function
