@@ -34,48 +34,91 @@ function Refresh-Path {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
-# Helper function to fix winget source issues
-function Repair-WingetSource {
-    Log-Info "Repairing winget sources..."
+# Get latest Node.js LTS version and download URL from API
+function Get-NodeJSLatestLTS {
     try {
-        winget source reset --force 2>$null
-        Start-Sleep -Seconds 2
+        $releases = Invoke-RestMethod -Uri "https://nodejs.org/dist/index.json" -TimeoutSec 30
+        $lts = $releases | Where-Object { $_.lts -ne $false } | Select-Object -First 1
+        $version = $lts.version
+        return @{
+            Version = $version
+            Url = "https://nodejs.org/dist/$version/node-$version-x64.msi"
+        }
     } catch {
-        # Ignore errors
+        return $null
     }
 }
 
-# Helper function to install via winget with retry
-function Install-ViaWinget {
-    param($PackageId, $DisplayName, $ManualUrl)
-
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Log-Error "Winget not available. Please install $DisplayName manually from $ManualUrl"
-        throw "$DisplayName installation failed - winget not available"
-    }
-
-    # First attempt
-    $output = winget install $PackageId --accept-package-agreements --accept-source-agreements 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        return $true
-    }
-
-    # Check for source errors and retry after repair
-    if ($output -match "source|0x8a15000f") {
-        Log-Warning "Winget source issue detected, attempting repair..."
-        Repair-WingetSource
-
-        # Second attempt after repair
-        winget install $PackageId --accept-package-agreements --accept-source-agreements 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            return $true
+# Get latest Git for Windows download URL from GitHub API
+function Get-GitLatestUrl {
+    try {
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/git-for-windows/git/releases/latest" -TimeoutSec 30
+        $asset = $release.assets | Where-Object { $_.name -match "64-bit\.exe$" } | Select-Object -First 1
+        return @{
+            Version = $release.tag_name
+            Url = $asset.browser_download_url
         }
+    } catch {
+        return $null
+    }
+}
+
+# Get latest GitHub CLI download URL from GitHub API
+function Get-GitHubCLILatestUrl {
+    try {
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/cli/cli/releases/latest" -TimeoutSec 30
+        $asset = $release.assets | Where-Object { $_.name -match "windows_amd64\.msi$" } | Select-Object -First 1
+        return @{
+            Version = $release.tag_name
+            Url = $asset.browser_download_url
+        }
+    } catch {
+        return $null
+    }
+}
+
+# Download and install MSI silently
+function Install-Msi {
+    param($Url, $DisplayName)
+
+    $tempFile = "$env:TEMP\$DisplayName-installer.msi"
+
+    Log-Info "Downloading $DisplayName..."
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $tempFile -UseBasicParsing -TimeoutSec 300
+    } catch {
+        throw "Failed to download $DisplayName"
     }
 
-    # Failed
-    Log-Error "Winget failed to install $DisplayName"
-    Log-Info "Please install manually from: $ManualUrl"
-    throw "$DisplayName installation failed"
+    Log-Info "Installing $DisplayName (this may take a moment)..."
+    $process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$tempFile`" /qn /norestart" -Wait -PassThru
+    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+
+    if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
+        throw "$DisplayName MSI installation failed (exit code: $($process.ExitCode))"
+    }
+}
+
+# Download and install EXE silently
+function Install-Exe {
+    param($Url, $DisplayName, $Arguments)
+
+    $tempFile = "$env:TEMP\$DisplayName-installer.exe"
+
+    Log-Info "Downloading $DisplayName..."
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $tempFile -UseBasicParsing -TimeoutSec 300
+    } catch {
+        throw "Failed to download $DisplayName"
+    }
+
+    Log-Info "Installing $DisplayName (this may take a moment)..."
+    $process = Start-Process -FilePath $tempFile -ArgumentList $Arguments -Wait -PassThru
+    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+
+    if ($process.ExitCode -ne 0) {
+        throw "$DisplayName installation failed (exit code: $($process.ExitCode))"
+    }
 }
 
 function Install-NodeJS {
@@ -86,16 +129,37 @@ function Install-NodeJS {
     }
 
     Log-Info "Installing Node.js..."
-    Install-ViaWinget "OpenJS.NodeJS.LTS" "Node.js" "https://nodejs.org"
 
-    Refresh-Path
+    # Primary: Direct download from nodejs.org
+    $nodeInfo = Get-NodeJSLatestLTS
+    if ($nodeInfo) {
+        try {
+            Install-Msi -Url $nodeInfo.Url -DisplayName "NodeJS"
+            Refresh-Path
 
-    # Verify installation
-    if (Get-Command node -ErrorAction SilentlyContinue) {
-        Log-Success "Node.js installed ($(node --version))"
-    } else {
-        Log-Warning "Node.js installed but may require terminal restart"
+            if (Get-Command node -ErrorAction SilentlyContinue) {
+                Log-Success "Node.js installed ($(node --version))"
+                return
+            }
+        } catch {
+            Log-Warning "Direct download failed: $_"
+        }
     }
+
+    # Fallback: winget
+    Log-Info "Trying winget as fallback..."
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements 2>$null
+        Refresh-Path
+        if (Get-Command node -ErrorAction SilentlyContinue) {
+            Log-Success "Node.js installed via winget"
+            return
+        }
+    }
+
+    Log-Error "Node.js installation failed"
+    Log-Info "Please install manually from: https://nodejs.org"
+    throw "Node.js installation failed"
 }
 
 function Install-Git {
@@ -106,16 +170,46 @@ function Install-Git {
     }
 
     Log-Info "Installing Git..."
-    Install-ViaWinget "Git.Git" "Git" "https://git-scm.com"
 
-    Refresh-Path
+    # Primary: Direct download from GitHub
+    $gitInfo = Get-GitLatestUrl
+    if ($gitInfo) {
+        try {
+            Install-Exe -Url $gitInfo.Url -DisplayName "Git" -Arguments "/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS=`"icons,ext\reg\shellhere,assoc,assoc_sh`""
+            Refresh-Path
 
-    # Verify installation
-    if (Get-Command git -ErrorAction SilentlyContinue) {
-        Log-Success "Git installed"
-    } else {
-        Log-Warning "Git installed but may require terminal restart"
+            # Add Git to PATH for current session
+            $gitPaths = @("${env:ProgramFiles}\Git\cmd", "${env:ProgramFiles(x86)}\Git\cmd")
+            foreach ($gp in $gitPaths) {
+                if (Test-Path $gp) {
+                    $env:Path = "$gp;$env:Path"
+                    break
+                }
+            }
+
+            if (Get-Command git -ErrorAction SilentlyContinue) {
+                Log-Success "Git installed"
+                return
+            }
+        } catch {
+            Log-Warning "Direct download failed: $_"
+        }
     }
+
+    # Fallback: winget
+    Log-Info "Trying winget as fallback..."
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install Git.Git --accept-package-agreements --accept-source-agreements 2>$null
+        Refresh-Path
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            Log-Success "Git installed via winget"
+            return
+        }
+    }
+
+    Log-Error "Git installation failed"
+    Log-Info "Please install manually from: https://git-scm.com"
+    throw "Git installation failed"
 }
 
 function Install-GitHubCLI {
@@ -126,16 +220,43 @@ function Install-GitHubCLI {
     }
 
     Log-Info "Installing GitHub CLI..."
-    Install-ViaWinget "GitHub.cli" "GitHub CLI" "https://cli.github.com"
 
-    Refresh-Path
+    # Primary: Direct download from GitHub
+    $ghInfo = Get-GitHubCLILatestUrl
+    if ($ghInfo) {
+        try {
+            Install-Msi -Url $ghInfo.Url -DisplayName "GitHubCLI"
+            Refresh-Path
 
-    # Verify installation
-    if (Get-Command gh -ErrorAction SilentlyContinue) {
-        Log-Success "GitHub CLI installed"
-    } else {
-        Log-Warning "GitHub CLI installed but may require terminal restart"
+            # Add gh to PATH for current session
+            $ghPath = "${env:ProgramFiles}\GitHub CLI"
+            if (Test-Path $ghPath) {
+                $env:Path = "$ghPath;$env:Path"
+            }
+
+            if (Get-Command gh -ErrorAction SilentlyContinue) {
+                Log-Success "GitHub CLI installed"
+                return
+            }
+        } catch {
+            Log-Warning "Direct download failed: $_"
+        }
     }
+
+    # Fallback: winget
+    Log-Info "Trying winget as fallback..."
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install GitHub.cli --accept-package-agreements --accept-source-agreements 2>$null
+        Refresh-Path
+        if (Get-Command gh -ErrorAction SilentlyContinue) {
+            Log-Success "GitHub CLI installed via winget"
+            return
+        }
+    }
+
+    Log-Error "GitHub CLI installation failed"
+    Log-Info "Please install manually from: https://cli.github.com"
+    throw "GitHub CLI installation failed"
 }
 
 function Install-ClaudeCode {
