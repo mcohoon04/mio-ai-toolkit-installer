@@ -12,8 +12,10 @@ $PLUGIN_REPO = "mcohoon04/mio-ai-toolkit"
 $MARKETPLACE_NAME = "mio-ai-marketplace"
 $PLUGIN_NAME = "mio-ai-toolkit"
 $WORKSPACE_DIR = "$env:USERPROFILE\claude_workspace"
-$CLAUDE_BIN = "$env:USERPROFILE\.claude\bin\claude.exe"
-$CLAUDE_BIN_ALT = "$env:USERPROFILE\.local\bin\claude.exe"
+
+# Official Windows installation paths (per https://code.claude.com/docs/en/setup)
+$CLAUDE_BIN = "$env:LOCALAPPDATA\Microsoft\WindowsApps\claude.exe"
+$CLAUDE_PROGRAM_DIR = "$env:LOCALAPPDATA\Programs\claude-code"
 
 # Logging functions
 function Log-Info { param($msg) Write-Host "[INFO] $msg" -ForegroundColor Cyan }
@@ -261,24 +263,28 @@ function Install-GitHubCLI {
     throw "GitHub CLI installation failed"
 }
 
-# Helper function to find Claude binary - checks multiple possible locations
+# Helper function to find Claude binary - uses official Windows paths
 function Get-ClaudeBin {
-    $possiblePaths = @(
-        "$env:USERPROFILE\.claude\bin\claude.exe",
-        "$env:USERPROFILE\.local\bin\claude.exe",
-        "$env:USERPROFILE\.claude\bin\claude.cmd",
-        "$env:USERPROFILE\.local\bin\claude.cmd",
-        "$env:USERPROFILE\.claude\bin\claude",
-        "$env:USERPROFILE\.local\bin\claude",
-        "$env:LOCALAPPDATA\Programs\claude\claude.exe",
-        "$env:ProgramFiles\Claude\claude.exe"
-    )
+    # Official Windows path first
+    if (Test-Path $CLAUDE_BIN) {
+        return $CLAUDE_BIN
+    }
 
-    foreach ($path in $possiblePaths) {
-        if (Test-Path $path) {
-            return $path
+    # Check if program directory exists (indicates installation)
+    if (Test-Path $CLAUDE_PROGRAM_DIR) {
+        # Look for executable in program directory
+        $exeInDir = Join-Path $CLAUDE_PROGRAM_DIR "claude.exe"
+        if (Test-Path $exeInDir) {
+            return $exeInDir
         }
     }
+
+    # Fallback: check if claude is in PATH
+    $inPath = Get-Command claude -ErrorAction SilentlyContinue
+    if ($inPath) {
+        return $inPath.Source
+    }
+
     return $null
 }
 
@@ -309,30 +315,25 @@ function Install-ClaudeCode {
     if ($installedClaude) {
         Log-Success "Claude Code installed at $installedClaude"
     } else {
-        # Debug: Show what files exist in expected directories
+        # Debug: Show what exists in official Windows paths
         Log-Warning "Claude binary not found in expected locations"
-        Log-Info "Checking directories..."
+        Log-Info "Expected: $CLAUDE_BIN"
+        Log-Info "Program dir: $CLAUDE_PROGRAM_DIR"
 
-        $dirsToCheck = @(
-            "$env:USERPROFILE\.claude\bin",
-            "$env:USERPROFILE\.local\bin",
-            "$env:LOCALAPPDATA\Programs\claude"
-        )
-
-        foreach ($dir in $dirsToCheck) {
-            if (Test-Path $dir) {
-                $files = Get-ChildItem $dir -ErrorAction SilentlyContinue | Select-Object -First 5
-                if ($files) {
-                    Log-Info "  $dir contains: $($files.Name -join ', ')"
-                }
-            }
+        if (Test-Path $CLAUDE_PROGRAM_DIR) {
+            $files = Get-ChildItem $CLAUDE_PROGRAM_DIR -ErrorAction SilentlyContinue | Select-Object -First 10
+            Log-Info "Program dir contains: $($files.Name -join ', ')"
+        } else {
+            Log-Info "Program directory does not exist"
         }
 
-        # Check if claude is in PATH anyway
-        $claudeInPath = Get-Command claude -ErrorAction SilentlyContinue
-        if ($claudeInPath) {
-            Log-Success "Claude Code found in PATH at $($claudeInPath.Source)"
-            return
+        # Check WindowsApps directory
+        $windowsAppsDir = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
+        if (Test-Path $windowsAppsDir) {
+            $claudeFiles = Get-ChildItem $windowsAppsDir -Filter "claude*" -ErrorAction SilentlyContinue
+            if ($claudeFiles) {
+                Log-Info "WindowsApps contains: $($claudeFiles.Name -join ', ')"
+            }
         }
 
         Log-Error "Claude Code installation could not be verified"
