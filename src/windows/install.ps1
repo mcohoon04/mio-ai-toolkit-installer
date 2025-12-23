@@ -261,10 +261,24 @@ function Install-GitHubCLI {
     throw "GitHub CLI installation failed"
 }
 
-# Helper function to find Claude binary
+# Helper function to find Claude binary - checks multiple possible locations
 function Get-ClaudeBin {
-    if (Test-Path $CLAUDE_BIN) { return $CLAUDE_BIN }
-    if (Test-Path $CLAUDE_BIN_ALT) { return $CLAUDE_BIN_ALT }
+    $possiblePaths = @(
+        "$env:USERPROFILE\.claude\bin\claude.exe",
+        "$env:USERPROFILE\.local\bin\claude.exe",
+        "$env:USERPROFILE\.claude\bin\claude.cmd",
+        "$env:USERPROFILE\.local\bin\claude.cmd",
+        "$env:USERPROFILE\.claude\bin\claude",
+        "$env:USERPROFILE\.local\bin\claude",
+        "$env:LOCALAPPDATA\Programs\claude\claude.exe",
+        "$env:ProgramFiles\Claude\claude.exe"
+    )
+
+    foreach ($path in $possiblePaths) {
+        if (Test-Path $path) {
+            return $path
+        }
+    }
     return $null
 }
 
@@ -272,7 +286,7 @@ function Install-ClaudeCode {
     # Check if already installed using full path
     $existingClaude = Get-ClaudeBin
     if ($existingClaude) {
-        Log-Success "Claude Code already installed"
+        Log-Success "Claude Code already installed at $existingClaude"
         return
     }
 
@@ -287,13 +301,43 @@ function Install-ClaudeCode {
         throw "Claude Code installation failed"
     }
 
+    # Wait a moment for file system to sync
+    Start-Sleep -Seconds 3
+
     # Verify installation using full path
     $installedClaude = Get-ClaudeBin
     if ($installedClaude) {
-        Log-Success "Claude Code installed"
+        Log-Success "Claude Code installed at $installedClaude"
     } else {
-        Log-Error "Claude Code installation failed"
-        Log-Info "Please install manually from: https://claude.ai/download"
+        # Debug: Show what files exist in expected directories
+        Log-Warning "Claude binary not found in expected locations"
+        Log-Info "Checking directories..."
+
+        $dirsToCheck = @(
+            "$env:USERPROFILE\.claude\bin",
+            "$env:USERPROFILE\.local\bin",
+            "$env:LOCALAPPDATA\Programs\claude"
+        )
+
+        foreach ($dir in $dirsToCheck) {
+            if (Test-Path $dir) {
+                $files = Get-ChildItem $dir -ErrorAction SilentlyContinue | Select-Object -First 5
+                if ($files) {
+                    Log-Info "  $dir contains: $($files.Name -join ', ')"
+                }
+            }
+        }
+
+        # Check if claude is in PATH anyway
+        $claudeInPath = Get-Command claude -ErrorAction SilentlyContinue
+        if ($claudeInPath) {
+            Log-Success "Claude Code found in PATH at $($claudeInPath.Source)"
+            return
+        }
+
+        Log-Error "Claude Code installation could not be verified"
+        Log-Info "Please restart your terminal and re-run the installer"
+        Log-Info "Or install manually from: https://claude.ai/download"
         throw "Claude Code installation failed"
     }
 }
