@@ -304,12 +304,16 @@ LAUNCH_EOF
 </plist>
 PLIST_EOF
 
-    # Copy icon if available
+    # Copy icon if available, otherwise download from repo
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ -f "$SCRIPT_DIR/icon.icns" ]]; then
         cp "$SCRIPT_DIR/icon.icns" "$app_path/Contents/Resources/icon.icns"
     elif [[ -f "./icon.icns" ]]; then
         cp "./icon.icns" "$app_path/Contents/Resources/icon.icns"
+    else
+        # Download icon from GitHub repo
+        curl -fsSL "https://raw.githubusercontent.com/mcohoon04/mio-ai-toolkit-installer/main/assets/icon.icns" \
+            -o "$app_path/Contents/Resources/icon.icns" 2>/dev/null || true
     fi
 
     log_success "Desktop shortcut created: $app_name"

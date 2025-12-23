@@ -315,21 +315,36 @@ function Create-DesktopShortcut {
     $Shortcut.WorkingDirectory = $WORKSPACE_DIR
     $Shortcut.Description = "Open Claude Code in workspace"
 
-    # Set icon if available
+    # Set icon if available, otherwise download from repo
     $scriptDir = Split-Path -Parent $MyInvocation.ScriptName
     $iconPaths = @(
         "$scriptDir\icon.ico",
         ".\icon.ico",
         "$PSScriptRoot\icon.ico"
     )
+    $permanentIcon = "$env:USERPROFILE\.claude\mio-icon.ico"
+    $iconFound = $false
 
     foreach ($iconPath in $iconPaths) {
         if (Test-Path $iconPath) {
             # Copy icon to permanent location
-            $permanentIcon = "$env:USERPROFILE\.claude\mio-icon.ico"
+            New-Item -ItemType Directory -Path "$env:USERPROFILE\.claude" -Force | Out-Null
             Copy-Item $iconPath $permanentIcon -Force
             $Shortcut.IconLocation = $permanentIcon
+            $iconFound = $true
             break
+        }
+    }
+
+    if (-not $iconFound) {
+        # Download icon from GitHub repo
+        try {
+            New-Item -ItemType Directory -Path "$env:USERPROFILE\.claude" -Force | Out-Null
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/mcohoon04/mio-ai-toolkit-installer/main/assets/icon.ico" `
+                -OutFile $permanentIcon -UseBasicParsing
+            $Shortcut.IconLocation = $permanentIcon
+        } catch {
+            # Silently continue without icon
         }
     }
 

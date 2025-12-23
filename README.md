@@ -18,7 +18,7 @@ Cross-platform installer for setting up Claude Code with the Mio AI Toolkit plug
 Open Terminal and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mcohoon04/mio-ai-toolkit-installer/main/src/mac/install.sh | bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/mcohoon04/mio-ai-toolkit-installer/main/src/mac/install.sh)"
 ```
 
 ### Windows
