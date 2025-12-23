@@ -276,14 +276,23 @@ function Install-ClaudeCode {
         throw "Claude Code installation failed"
     }
 
-    # Refresh PATH and add Claude bin directory
+    # Refresh PATH and add Claude bin directories (installer uses .local\bin)
     Refresh-Path
-    $env:Path = "$env:USERPROFILE\.claude\bin;$env:Path"
+    $claudePaths = @(
+        "$env:USERPROFILE\.local\bin",
+        "$env:USERPROFILE\.claude\bin"
+    )
+    foreach ($cp in $claudePaths) {
+        if (Test-Path $cp) {
+            $env:Path = "$cp;$env:Path"
+        }
+    }
 
     if (Get-Command claude -ErrorAction SilentlyContinue) {
         Log-Success "Claude Code installed"
     } else {
         Log-Warning "Claude Code installed but may require terminal restart"
+        Log-Info "Add this to your PATH: $env:USERPROFILE\.local\bin"
     }
 }
 
@@ -292,8 +301,14 @@ function Install-ClaudeCode {
 ##############################################################
 
 function Authenticate-GitHub {
-    $authStatus = gh auth status 2>&1
-    if ($LASTEXITCODE -eq 0) {
+    # Check auth status without throwing on stderr
+    $origErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $null = gh auth status 2>&1
+    $authExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $origErrorAction
+
+    if ($authExitCode -eq 0) {
         Log-Success "GitHub CLI already authenticated"
         return
     }
