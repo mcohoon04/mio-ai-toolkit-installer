@@ -13,9 +13,13 @@ $MARKETPLACE_NAME = "mio-ai-marketplace"
 $PLUGIN_NAME = "mio-ai-toolkit"
 $WORKSPACE_DIR = "$env:USERPROFILE\claude_workspace"
 
-# Official Windows installation paths (per https://code.claude.com/docs/en/setup)
-$CLAUDE_BIN = "$env:LOCALAPPDATA\Microsoft\WindowsApps\claude.exe"
-$CLAUDE_PROGRAM_DIR = "$env:LOCALAPPDATA\Programs\claude-code"
+# All known Claude installation paths (official docs + installer behavior)
+$CLAUDE_PATHS = @(
+    "$env:LOCALAPPDATA\Microsoft\WindowsApps\claude.exe",      # Official Windows path
+    "$env:LOCALAPPDATA\Programs\claude-code\claude.exe",       # Official program dir
+    "$env:USERPROFILE\.local\bin\claude.exe",                  # What installer actually uses
+    "$env:USERPROFILE\.claude\bin\claude.exe"                  # Alternative location
+)
 
 # Logging functions
 function Log-Info { param($msg) Write-Host "[INFO] $msg" -ForegroundColor Cyan }
@@ -263,19 +267,12 @@ function Install-GitHubCLI {
     throw "GitHub CLI installation failed"
 }
 
-# Helper function to find Claude binary - uses official Windows paths
+# Helper function to find Claude binary - checks all known locations
 function Get-ClaudeBin {
-    # Official Windows path first
-    if (Test-Path $CLAUDE_BIN) {
-        return $CLAUDE_BIN
-    }
-
-    # Check if program directory exists (indicates installation)
-    if (Test-Path $CLAUDE_PROGRAM_DIR) {
-        # Look for executable in program directory
-        $exeInDir = Join-Path $CLAUDE_PROGRAM_DIR "claude.exe"
-        if (Test-Path $exeInDir) {
-            return $exeInDir
+    # Check all known paths
+    foreach ($path in $CLAUDE_PATHS) {
+        if (Test-Path $path) {
+            return $path
         }
     }
 
@@ -307,39 +304,42 @@ function Install-ClaudeCode {
         throw "Claude Code installation failed"
     }
 
-    # Wait a moment for file system to sync
-    Start-Sleep -Seconds 3
+    # Wait for file system to sync (Claude installer may be async)
+    Start-Sleep -Seconds 5
 
     # Verify installation using full path
     $installedClaude = Get-ClaudeBin
     if ($installedClaude) {
         Log-Success "Claude Code installed at $installedClaude"
     } else {
-        # Debug: Show what exists in official Windows paths
-        Log-Warning "Claude binary not found in expected locations"
-        Log-Info "Expected: $CLAUDE_BIN"
-        Log-Info "Program dir: $CLAUDE_PROGRAM_DIR"
+        # Debug: Show all paths we checked
+        Log-Warning "Claude binary not found. Checking all known locations..."
 
-        if (Test-Path $CLAUDE_PROGRAM_DIR) {
-            $files = Get-ChildItem $CLAUDE_PROGRAM_DIR -ErrorAction SilentlyContinue | Select-Object -First 10
-            Log-Info "Program dir contains: $($files.Name -join ', ')"
-        } else {
-            Log-Info "Program directory does not exist"
-        }
+        foreach ($path in $CLAUDE_PATHS) {
+            $exists = Test-Path $path
+            $parentDir = Split-Path $path -Parent
+            $parentExists = Test-Path $parentDir
 
-        # Check WindowsApps directory
-        $windowsAppsDir = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
-        if (Test-Path $windowsAppsDir) {
-            $claudeFiles = Get-ChildItem $windowsAppsDir -Filter "claude*" -ErrorAction SilentlyContinue
-            if ($claudeFiles) {
-                Log-Info "WindowsApps contains: $($claudeFiles.Name -join ', ')"
+            if ($exists) {
+                Log-Info "  FOUND: $path"
+            } elseif ($parentExists) {
+                $files = Get-ChildItem $parentDir -ErrorAction SilentlyContinue | Select-Object -First 5
+                Log-Info "  NOT FOUND: $path"
+                Log-Info "    Directory exists, contains: $($files.Name -join ', ')"
+            } else {
+                Log-Info "  NOT FOUND: $path (directory doesn't exist)"
             }
         }
 
-        Log-Error "Claude Code installation could not be verified"
-        Log-Info "Please restart your terminal and re-run the installer"
-        Log-Info "Or install manually from: https://claude.ai/download"
-        throw "Claude Code installation failed"
+        # This appears to be a Claude installer bug - it claims to install but file doesn't exist
+        # Let's check if user wants to continue anyway (maybe works after restart)
+        Log-Warning "Claude's installer reported success but the binary was not found."
+        Log-Warning "This may be a bug in Claude's Windows installer."
+        Log-Info "You can try:"
+        Log-Info "  1. Restart your terminal and re-run this installer"
+        Log-Info "  2. Install Claude manually: irm https://claude.ai/install.ps1 | iex"
+        Log-Info "  3. Install via npm: npm install -g @anthropic-ai/claude-code"
+        throw "Claude Code installation could not be verified"
     }
 }
 
