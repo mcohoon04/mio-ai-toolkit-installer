@@ -9,74 +9,54 @@ Cross-platform installer for setting up Claude Code with the Mio AI Toolkit plug
 3. Installs the Mio AI Toolkit plugin from private marketplace
 4. Configures Gmail MCP integration
 5. Creates `~/claude_workspace` directory
-6. Adds "Claude Workspace" shortcut to your Desktop
+6. Adds "Claude Workspace" shortcut to your Desktop and Dock/Taskbar
 
-## For Users
+## Installation
 
 ### Mac
 
-1. Download `Mio AI Toolkit Installer.app`
-2. Double-click to run
-3. Follow the prompts (browser windows will open for authentication)
-4. When complete, double-click "Claude Workspace" on your Desktop
+Open Terminal and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mcohoon04/mio-ai-toolkit-installer/main/src/mac/install.sh | bash
+```
 
 ### Windows
 
-1. Download `MioAIToolkitInstaller.exe`
-2. Double-click to run (allow admin permissions if prompted)
-3. Follow the prompts (browser windows will open for authentication)
-4. When complete, double-click "Claude Workspace" on your Desktop
+Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/mcohoon04/mio-ai-toolkit-installer/main/src/windows/install.ps1 | iex
+```
 
 ### Prerequisites
 
 - GitHub account with access to `mcohoon04/mio-ai-toolkit` repo
 - Google account for Gmail integration
 
-## For Developers
+## After Installation
 
-### Project Structure
+- **Mac:** Double-click "Claude Workspace" on your Desktop or Dock
+- **Windows:** Double-click "Claude Workspace" on your Desktop or Taskbar
+
+Your workspace is at `~/claude_workspace` (Mac) or `%USERPROFILE%\claude_workspace` (Windows).
+
+## Project Structure
 
 ```
-├── src/
-│   ├── mac/
-│   │   └── install.sh          # Mac installer script
-│   └── windows/
-│       └── install.ps1         # Windows installer script
-├── assets/
-│   ├── mio-logo.png            # Source logo
-│   ├── icon.icns               # Mac icon
-│   ├── icon.ico                # Windows icon
-│   └── gcp-oauth.keys.json     # Gmail OAuth app credentials
-├── build/
-│   ├── build-mac.sh            # Build Mac .app
-│   └── build-windows.ps1       # Build Windows .exe
-├── dist/                       # Output directory
-├── scripts/
-│   └── convert-icon.sh         # PNG to icon converter
-└── docs/
-    ├── plans/                  # Design documents
-    └── TESTING.md              # Testing checklist
+src/
+  mac/install.sh        # Mac installer script
+  windows/install.ps1   # Windows installer script
+assets/
+  icon.icns             # Mac icon
+  icon.ico              # Windows icon
+  mio-logo.png          # Source logo
+build/
+  build-mac.sh          # Build Mac .app (optional)
+  build-windows.ps1     # Build Windows .exe (optional)
+scripts/
+  convert-icon.sh       # PNG to icon converter
 ```
-
-### Building
-
-**Mac:**
-```bash
-./build/build-mac.sh
-# Output: dist/Mio AI Toolkit Installer.app
-```
-
-**Windows (run in PowerShell):**
-```powershell
-.\build\build-windows.ps1
-# Output: dist\MioAIToolkitInstaller.exe
-```
-
-### Requirements
-
-- **Mac build:** Platypus with CLI tools installed
-- **Windows build:** PS2EXE PowerShell module
-- **Icon conversion:** ImageMagick (for .ico generation)
 
 ## License
 
