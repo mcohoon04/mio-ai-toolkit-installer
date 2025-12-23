@@ -283,6 +283,53 @@ function Create-DesktopShortcut {
     Log-Success "Desktop shortcut created: Claude Workspace"
 }
 
+function Add-ToTaskbar {
+    $shortcutPath = "$env:USERPROFILE\Desktop\Claude Workspace.lnk"
+
+    if (-not (Test-Path $shortcutPath)) {
+        Log-Warning "Shortcut not found, skipping taskbar"
+        return
+    }
+
+    Log-Info "Adding to Taskbar..."
+
+    try {
+        # Use Shell.Application to pin to taskbar
+        $shell = New-Object -ComObject Shell.Application
+        $folder = $shell.Namespace((Split-Path $shortcutPath))
+        $item = $folder.ParseName((Split-Path $shortcutPath -Leaf))
+
+        # Try to pin (verb may vary by Windows version)
+        $verb = $item.Verbs() | Where-Object { $_.Name -match 'Pin to Taskbar|An Taskleiste anheften' }
+        if ($verb) {
+            $verb.DoIt()
+            Log-Success "Added to Taskbar"
+        } else {
+            # Alternative: Copy to taskbar pins folder
+            $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+            if (Test-Path $taskbarPath) {
+                Copy-Item $shortcutPath $taskbarPath -Force
+                Log-Success "Added to Taskbar"
+            } else {
+                Log-Warning "Could not pin to taskbar automatically"
+            }
+        }
+    } catch {
+        Log-Warning "Could not pin to taskbar: $_"
+    }
+}
+
+function Launch-App {
+    $shortcutPath = "$env:USERPROFILE\Desktop\Claude Workspace.lnk"
+
+    if (Test-Path $shortcutPath) {
+        Log-Info "Launching Claude Workspace..."
+        Start-Sleep -Seconds 2
+        Start-Process $shortcutPath
+        Log-Success "Claude Workspace launched!"
+    }
+}
+
 ##############################################################
 # MAIN EXECUTION
 ##############################################################
@@ -319,6 +366,7 @@ function Main {
         Log-Info "Step 5/5: Creating workspace..."
         Create-Workspace
         Create-DesktopShortcut
+        Add-ToTaskbar
         Write-Host ""
 
         # Success message
@@ -326,24 +374,22 @@ function Main {
         Write-Host "   Installation Complete!" -ForegroundColor Green
         Write-Host "===========================================" -ForegroundColor Green
         Write-Host ""
-        Write-Host "Next steps:"
-        Write-Host "  1. Double-click 'Claude Workspace' on your Desktop"
-        Write-Host "  2. Or open PowerShell and run: cd $WORKSPACE_DIR; claude"
-        Write-Host ""
+        Write-Host "Claude Workspace has been added to your Desktop and Taskbar."
         Write-Host "Your workspace is at: $WORKSPACE_DIR"
         Write-Host ""
+
+        # Launch the app
+        Launch-App
 
     } catch {
         Log-Error "Installation failed: $_"
         Write-Host ""
         Write-Host "Please fix the error above and re-run the installer."
+        Write-Host "Press any key to close..." -ForegroundColor Gray
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         exit 1
     }
 }
 
 # Run main function
 Main
-
-# Keep window open
-Write-Host "Press any key to close..." -ForegroundColor Gray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
