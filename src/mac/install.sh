@@ -19,12 +19,18 @@ MARKETPLACE_NAME="mio-ai-marketplace"
 PLUGIN_NAME="mio-ai-toolkit"
 WORKSPACE_DIR="$HOME/claude_workspace"
 
-# Helper function to find Claude binary (checks both possible locations)
+# Helper function to find Claude binary
+# Checks: 1) Native install location, 2) Legacy location, 3) npm/PATH
 get_claude_bin() {
+    # Primary: Native install location (recommended)
     if [[ -x "$HOME/.local/bin/claude" ]]; then
         echo "$HOME/.local/bin/claude"
+    # Legacy: Old native location (for backwards compatibility)
     elif [[ -x "$HOME/.claude/bin/claude" ]]; then
         echo "$HOME/.claude/bin/claude"
+    # Fallback: npm or other PATH-based installation
+    elif command -v claude &> /dev/null; then
+        command -v claude
     else
         echo ""
     fi
