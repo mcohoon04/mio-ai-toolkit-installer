@@ -155,23 +155,28 @@ ensure_claude_in_path() {
         log_info "Added $local_bin to PATH for current session"
     fi
 
-    # Add to shell rc file for future sessions
-    local shell_rc=""
-    if [[ -n "$ZSH_VERSION" ]] || [[ "$SHELL" == */zsh ]]; then
-        shell_rc="$HOME/.zshrc"
-    elif [[ -n "$BASH_VERSION" ]] || [[ "$SHELL" == */bash ]]; then
-        shell_rc="$HOME/.bashrc"
+    # Add to shell profile for future sessions
+    # On macOS, use .zprofile for PATH (login shells read this)
+    # On Linux, use .bashrc or .zshrc
+    local shell_profile=""
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS: Terminal.app opens login shells, use .zprofile
+        shell_profile="$HOME/.zprofile"
+    elif [[ "$SHELL" == */zsh ]]; then
+        shell_profile="$HOME/.zshrc"
+    elif [[ "$SHELL" == */bash ]]; then
+        shell_profile="$HOME/.bashrc"
     fi
 
-    if [[ -n "$shell_rc" ]]; then
+    if [[ -n "$shell_profile" ]]; then
         # Create file if it doesn't exist
-        touch "$shell_rc"
-        # Check if already added
-        if ! grep -q 'export PATH="\$HOME/.local/bin:\$PATH"' "$shell_rc" 2>/dev/null; then
-            echo '' >> "$shell_rc"
-            echo '# Added by Mio AI Toolkit installer' >> "$shell_rc"
-            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
-            log_success "Added ~/.local/bin to $shell_rc"
+        touch "$shell_profile"
+        # Check if already added (check both possible formats)
+        if ! grep -q '.local/bin' "$shell_profile" 2>/dev/null; then
+            echo '' >> "$shell_profile"
+            echo '# Added by Mio AI Toolkit installer' >> "$shell_profile"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_profile"
+            log_success "Added ~/.local/bin to $shell_profile"
         fi
     fi
 }
@@ -482,10 +487,10 @@ main() {
     echo "Claude Workspace has been added to your Dock and Desktop."
     echo "Your workspace is at: $WORKSPACE_DIR"
     echo ""
-    echo -e "${YELLOW}IMPORTANT:${NC} To use 'claude' command in terminal, run:"
-    echo "  source ~/.zshrc"
+    echo -e "${YELLOW}IMPORTANT:${NC} To use 'claude' command in this terminal, run:"
+    echo "  source ~/.zprofile"
     echo ""
-    echo "Or simply open a new terminal window."
+    echo "Or simply open a new terminal window (recommended)."
     echo ""
 
     # Get current terminal window ID before launching app
