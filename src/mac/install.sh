@@ -182,6 +182,8 @@ authenticate_github() {
     # Check if already authenticated
     if gh auth status &> /dev/null; then
         log_success "GitHub CLI already authenticated"
+        # Ensure git is configured to use GitHub CLI for credentials
+        gh auth setup-git 2>/dev/null || true
         return 0
     fi
 
@@ -192,6 +194,8 @@ authenticate_github() {
     # Run interactive GitHub auth
     if gh auth login --web --git-protocol https; then
         log_success "GitHub authenticated successfully"
+        # Configure git to use GitHub CLI for credentials (needed for private repos)
+        gh auth setup-git 2>/dev/null || true
     else
         log_error "GitHub authentication failed"
         log_info "Fallback: Configure Git credentials manually"
@@ -475,6 +479,11 @@ main() {
     echo ""
     echo "Claude Workspace has been added to your Dock and Desktop."
     echo "Your workspace is at: $WORKSPACE_DIR"
+    echo ""
+    echo -e "${YELLOW}IMPORTANT:${NC} To use 'claude' command in terminal, run:"
+    echo "  source ~/.zshrc"
+    echo ""
+    echo "Or simply open a new terminal window."
     echo ""
 
     # Get current terminal window ID before launching app
