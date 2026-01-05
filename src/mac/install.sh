@@ -163,7 +163,9 @@ ensure_claude_in_path() {
         shell_rc="$HOME/.bashrc"
     fi
 
-    if [[ -n "$shell_rc" ]] && [[ -f "$shell_rc" ]]; then
+    if [[ -n "$shell_rc" ]]; then
+        # Create file if it doesn't exist
+        touch "$shell_rc"
         # Check if already added
         if ! grep -q 'export PATH="\$HOME/.local/bin:\$PATH"' "$shell_rc" 2>/dev/null; then
             echo '' >> "$shell_rc"
