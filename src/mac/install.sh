@@ -155,28 +155,24 @@ ensure_claude_in_path() {
         log_info "Added $local_bin to PATH for current session"
     fi
 
-    # Add to shell profile for future sessions
-    # On macOS, use .zprofile for PATH (login shells read this)
-    # On Linux, use .bashrc or .zshrc
-    local shell_profile=""
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS: Terminal.app opens login shells, use .zprofile
-        shell_profile="$HOME/.zprofile"
-    elif [[ "$SHELL" == */zsh ]]; then
-        shell_profile="$HOME/.zshrc"
+    # Add to shell config for future sessions
+    # Use .zshrc on macOS (matches Claude's own installer recommendation)
+    local shell_rc=""
+    if [[ "$SHELL" == */zsh ]] || [[ "$OSTYPE" == "darwin"* ]]; then
+        shell_rc="$HOME/.zshrc"
     elif [[ "$SHELL" == */bash ]]; then
-        shell_profile="$HOME/.bashrc"
+        shell_rc="$HOME/.bashrc"
     fi
 
-    if [[ -n "$shell_profile" ]]; then
-        # Create file if it doesn't exist
-        touch "$shell_profile"
-        # Check if already added (check both possible formats)
-        if ! grep -q '.local/bin' "$shell_profile" 2>/dev/null; then
-            echo '' >> "$shell_profile"
-            echo '# Added by Mio AI Toolkit installer' >> "$shell_profile"
-            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_profile"
-            log_success "Added ~/.local/bin to $shell_profile"
+    if [[ -n "$shell_rc" ]]; then
+        # Create file if it doesn't exist (fresh macOS doesn't have .zshrc)
+        touch "$shell_rc"
+        # Check if already added
+        if ! grep -q '.local/bin' "$shell_rc" 2>/dev/null; then
+            echo '' >> "$shell_rc"
+            echo '# Added by Mio AI Toolkit installer' >> "$shell_rc"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
+            log_success "Added ~/.local/bin to $shell_rc"
         fi
     fi
 }
@@ -488,7 +484,7 @@ main() {
     echo "Your workspace is at: $WORKSPACE_DIR"
     echo ""
     echo -e "${YELLOW}IMPORTANT:${NC} To use 'claude' command in this terminal, run:"
-    echo "  source ~/.zprofile"
+    echo "  source ~/.zshrc"
     echo ""
     echo "Or simply open a new terminal window (recommended)."
     echo ""
