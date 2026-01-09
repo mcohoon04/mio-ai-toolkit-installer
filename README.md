@@ -67,7 +67,7 @@ Open Claude Workspace and run these commands one at a time:
 
 **Superpowers (Optional):**
 ```
-/plugin marketplace add anthropics/superpowers
+/plugin marketplace add obra/superpowers-marketplace
 /plugin install superpowers@superpowers-marketplace
 ```
 
