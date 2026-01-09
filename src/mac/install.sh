@@ -1,7 +1,7 @@
 #!/bin/bash
 ##############################################################
 # Mio AI Toolkit Installer for macOS
-# Simple installer: Claude Code + Plugin + Workspace Shortcut
+# Installs Claude Code + Creates Workspace with Shortcut
 ##############################################################
 
 set -e
@@ -9,14 +9,10 @@ set -e
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Config
-PLUGIN_REPO="mcohoon04/mio-ai-toolkit"
-MARKETPLACE_NAME="mio-ai-marketplace"
-PLUGIN_NAME="mio-ai-toolkit"
 WORKSPACE_DIR="$HOME/claude_workspace"
 CLAUDE_BIN="$HOME/.local/bin/claude"
 
@@ -41,101 +37,83 @@ else
     log_info "Running Claude Code installer..."
     curl -fsSL https://claude.ai/install.sh | bash
 
-    # Verify it installed
     if [[ ! -x "$CLAUDE_BIN" ]]; then
         log_error "Claude Code installation failed"
-        log_info "Please install manually: curl -fsSL https://claude.ai/install.sh | bash"
         exit 1
     fi
     log_success "Claude Code installed"
 fi
 
-# Ensure PATH has ~/.local/bin for this session
+echo ""
+
+##############################################################
+# STEP 2: PATH Safety Check
+##############################################################
+log_info "Step 2/4: Checking PATH configuration..."
+
+# Export PATH for this script session
 export PATH="$HOME/.local/bin:$PATH"
 
-# Add to .zshrc if not already there
-if ! grep -q '.local/bin' ~/.zshrc 2>/dev/null; then
-    echo '' >> ~/.zshrc
-    echo '# Claude Code' >> ~/.zshrc
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-    log_success "Added ~/.local/bin to PATH"
+# Check if PATH needs to be added to shell config
+SHELL_CONFIG=""
+if [[ "$SHELL" == *"zsh"* ]]; then
+    SHELL_CONFIG="$HOME/.zshrc"
+elif [[ "$SHELL" == *"bash"* ]]; then
+    SHELL_CONFIG="$HOME/.bashrc"
 fi
 
-echo ""
+if [[ -n "$SHELL_CONFIG" ]]; then
+    # Create shell config if it doesn't exist
+    touch "$SHELL_CONFIG"
 
-##############################################################
-# STEP 2: GitHub Authentication (needed for private plugin)
-##############################################################
-log_info "Step 2/4: GitHub authentication..."
-
-# Check if gh is installed
-if ! command -v gh &> /dev/null; then
-    log_info "Installing GitHub CLI..."
-
-    # Try Homebrew first
-    if command -v brew &> /dev/null; then
-        brew install gh
+    if ! grep -q '.local/bin' "$SHELL_CONFIG" 2>/dev/null; then
+        echo '' >> "$SHELL_CONFIG"
+        echo '# Claude Code' >> "$SHELL_CONFIG"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_CONFIG"
+        log_success "Added ~/.local/bin to PATH in $(basename "$SHELL_CONFIG")"
+        echo -e "${BLUE}[NOTE]${NC} If 'claude' isn't found in other terminals, run: source $SHELL_CONFIG"
     else
-        # Install Homebrew first
-        log_info "Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-        # Set up Homebrew PATH
-        if [[ -f /opt/homebrew/bin/brew ]]; then
-            eval "$(/opt/homebrew/bin/brew shellenv)"
-        elif [[ -f /usr/local/bin/brew ]]; then
-            eval "$(/usr/local/bin/brew shellenv)"
-        fi
-
-        brew install gh
+        log_success "PATH already configured"
     fi
-fi
-
-# Check if already authenticated
-if gh auth status &> /dev/null; then
-    log_success "GitHub already authenticated"
 else
-    log_info "Please sign in to GitHub (browser will open)..."
-    gh auth login --web --git-protocol https
-    log_success "GitHub authenticated"
-fi
-
-# Configure git to use GitHub CLI credentials (needed for private repo access)
-gh auth setup-git 2>/dev/null || true
-
-echo ""
-
-##############################################################
-# STEP 3: Install Plugin
-##############################################################
-log_info "Step 3/4: Installing Mio AI Toolkit plugin..."
-
-# Add marketplace
-log_info "Adding marketplace..."
-"$CLAUDE_BIN" plugin marketplace add "$PLUGIN_REPO" 2>/dev/null || true
-
-# Install plugin
-log_info "Installing plugin..."
-if "$CLAUDE_BIN" plugin install "${PLUGIN_NAME}@${MARKETPLACE_NAME}"; then
-    log_success "Plugin installed"
-else
-    log_error "Plugin installation failed"
-    log_info "Try manually: claude plugin install ${PLUGIN_NAME}@${MARKETPLACE_NAME}"
-    exit 1
+    log_info "Unknown shell, please add ~/.local/bin to your PATH manually"
 fi
 
 echo ""
 
 ##############################################################
-# STEP 4: Create Workspace & Shortcut
+# STEP 3: Create Workspace with Config Files
 ##############################################################
-log_info "Step 4/4: Creating workspace and shortcut..."
+log_info "Step 3/4: Creating workspace..."
 
-# Create workspace
 mkdir -p "$WORKSPACE_DIR"
 log_success "Workspace created: $WORKSPACE_DIR"
 
-# Create desktop shortcut (.app bundle)
+# Create .env if it doesn't exist
+if [[ ! -f "$WORKSPACE_DIR/.env" ]]; then
+    cat > "$WORKSPACE_DIR/.env" << 'EOF'
+# Environment variables for Claude workspace
+EOF
+    log_success "Created .env"
+fi
+
+# Create .mcp.json if it doesn't exist
+if [[ ! -f "$WORKSPACE_DIR/.mcp.json" ]]; then
+    cat > "$WORKSPACE_DIR/.mcp.json" << 'EOF'
+{
+  "mcpServers": {}
+}
+EOF
+    log_success "Created .mcp.json"
+fi
+
+echo ""
+
+##############################################################
+# STEP 4: Create Desktop Shortcut & Add to Dock
+##############################################################
+log_info "Step 4/4: Creating shortcut..."
+
 APP_PATH="$HOME/Desktop/Claude Workspace.app"
 
 if [[ ! -d "$APP_PATH" ]]; then
@@ -185,7 +163,7 @@ EOF
     log_success "Desktop shortcut created"
 fi
 
-# Add to Dock
+# Add to Dock if not already there
 if ! defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q "Claude Workspace"; then
     defaults write com.apple.dock persistent-apps -array-add "<dict>
         <key>tile-data</key>
@@ -210,6 +188,8 @@ echo "==========================================="
 echo ""
 echo "Your workspace: $WORKSPACE_DIR"
 echo "Click 'Claude Workspace' on your Desktop or Dock to start."
+echo ""
+echo "To install the Mio AI Toolkit plugin, see the README for instructions."
 echo ""
 
 # Launch
